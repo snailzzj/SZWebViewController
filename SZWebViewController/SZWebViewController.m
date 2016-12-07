@@ -88,6 +88,11 @@
     [self.closeBarButtonItem setTintColor:color];
 }
 
+- (void)setTitleColor:(UIColor *)color
+{
+    self.titleLabel.textColor = color;
+}
+
 #pragma mark - Private
 
 - (void)resetLeftBarButtonItems

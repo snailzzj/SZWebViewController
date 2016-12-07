@@ -8,5 +8,6 @@
 - (void)setBackBtnTitle:(NSString *)title;
 - (void)setBackBtnTintColor:(UIColor *)color;
 - (void)setCloseBtnTintColor:(UIColor *)color;
+- (void)setTitleColor:(UIColor *)color;
 
 @end
