@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Test Page</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
+</head>
+<body>
+	<button onclick="app.setTitle('设置标题')">设置标题</button><br>
+    <button onclick="app.addNavRightTextButton(['按钮', 'btnHandle'])">添加文字按钮</button>
+    <button onclick="app.addNavRightImageButton(['testImage', 'btnHandle2'])">添加图片按钮</button><br>
+    <button onclick="app.hideNavBar()">隐藏导航栏</button><br>
+    <button onclick="app.showNavBar()">显示导航栏</button><br>
+    <button onclick="app.hideTabBar()">隐藏Tab栏</button><br>
+    <button onclick="app.showTabBar()">显示Tab栏</button><br>
+
+    <br>
+
+    <button onclick="app.testFunc('function(){alert('++')}')">测试函数</button><br>
+</body>
+</html>
+
+<script>
+
+function AppLoadFinished() {
+	app.setTitle('app对象载入完成')
+}
+
+function btnHandle() {
+	alert("文字按钮")
+}
+
+function btnHandle2() {
+	alert("图片按钮")
+}
+
+</script>

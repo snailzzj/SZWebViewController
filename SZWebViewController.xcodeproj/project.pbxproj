@@ -14,6 +14,9 @@
 		1E2DB7031DEFC64D0009137F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1E2DB7021DEFC64D0009137F /* Assets.xcassets */; };
 		1E2DB7061DEFC64D0009137F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1E2DB7041DEFC64D0009137F /* LaunchScreen.storyboard */; };
 		1E2DB70F1DEFE7B90009137F /* SZWebViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 1E2DB70E1DEFE7B90009137F /* SZWebViewController.m */; };
+		1EB103831E825DE300FC65B3 /* TestViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 1EB103821E825DE300FC65B3 /* TestViewController.m */; };
+		1EB103851E82615900FC65B3 /* test.html in Resources */ = {isa = PBXBuildFile; fileRef = 1EB103841E82615900FC65B3 /* test.html */; };
+		1EB15B5F1E84B6DE00A98FD6 /* jquery-3.2.0.min.js in Resources */ = {isa = PBXBuildFile; fileRef = 1EB15B5E1E84B6DE00A98FD6 /* jquery-3.2.0.min.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +32,10 @@
 		1E2DB7071DEFC64D0009137F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		1E2DB70D1DEFE7B90009137F /* SZWebViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SZWebViewController.h; sourceTree = "<group>"; };
 		1E2DB70E1DEFE7B90009137F /* SZWebViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SZWebViewController.m; sourceTree = "<group>"; };
+		1EB103811E825DE300FC65B3 /* TestViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TestViewController.h; sourceTree = "<group>"; };
+		1EB103821E825DE300FC65B3 /* TestViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = TestViewController.m; sourceTree = "<group>"; };
+		1EB103841E82615900FC65B3 /* test.html */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.html; path = test.html; sourceTree = "<group>"; };
+		1EB15B5E1E84B6DE00A98FD6 /* jquery-3.2.0.min.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = "jquery-3.2.0.min.js"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +74,10 @@
 				1E2DB6FD1DEFC64D0009137F /* ViewController.m */,
 				1E2DB70D1DEFE7B90009137F /* SZWebViewController.h */,
 				1E2DB70E1DEFE7B90009137F /* SZWebViewController.m */,
+				1EB103811E825DE300FC65B3 /* TestViewController.h */,
+				1EB103821E825DE300FC65B3 /* TestViewController.m */,
+				1EB15B5E1E84B6DE00A98FD6 /* jquery-3.2.0.min.js */,
+				1EB103841E82615900FC65B3 /* test.html */,
 				1E2DB6FF1DEFC64D0009137F /* Main.storyboard */,
 				1E2DB7021DEFC64D0009137F /* Assets.xcassets */,
 				1E2DB7041DEFC64D0009137F /* LaunchScreen.storyboard */,
@@ -143,6 +154,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1EB15B5F1E84B6DE00A98FD6 /* jquery-3.2.0.min.js in Resources */,
+				1EB103851E82615900FC65B3 /* test.html in Resources */,
 				1E2DB7061DEFC64D0009137F /* LaunchScreen.storyboard in Resources */,
 				1E2DB7031DEFC64D0009137F /* Assets.xcassets in Resources */,
 				1E2DB7011DEFC64D0009137F /* Main.storyboard in Resources */,
@@ -160,6 +173,7 @@
 				1E2DB6FB1DEFC64D0009137F /* AppDelegate.m in Sources */,
 				1E2DB70F1DEFE7B90009137F /* SZWebViewController.m in Sources */,
 				1E2DB6F81DEFC64D0009137F /* main.m in Sources */,
+				1EB103831E825DE300FC65B3 /* TestViewController.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

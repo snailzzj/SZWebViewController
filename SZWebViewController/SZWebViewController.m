@@ -1,5 +1,3 @@
-#import <WebKit/WebKit.h>
-
 #import "SZWebViewController.h"
 
 #define SZ_NAV_HEIGHT (self.navigationController.navigationBar.frame.size.height+[UIApplication sharedApplication].statusBarFrame.size.height)
@@ -7,30 +5,24 @@
 #define SZ_SCREEN_WIDTH [UIScreen mainScreen].bounds.size.width
 #define SZ_SCREEN_HEIGHT [UIScreen mainScreen].bounds.size.height
 
-@interface SZWebViewController () <UIGestureRecognizerDelegate, WKNavigationDelegate>
-
-@property (strong, nonatomic) UIBarButtonItem *backBarButtonItem;
-@property (strong, nonatomic) UIBarButtonItem *closeBarButtonItem;
-@property (strong, nonatomic) UILabel *titleLabel;
-
-@property (strong, nonatomic) WKWebView *webView;
-@property (strong, nonatomic) NSMutableArray<UIImageView *> *snapshotViews;
-@property (strong, nonatomic) UIView *progressView;
-
-@property (strong, nonatomic) UIPanGestureRecognizer *backPan;
+@interface SZWebViewController ()
 
 @end
 
 @implementation SZWebViewController
 {
-    NSString *_url;
+    NSURL *_url;
+    
+    NSMutableDictionary *_handleDict;
 }
 
-- (instancetype)initWithURL:(NSString *)url
+- (instancetype)initWithURL:(NSURL *)url
 {
     self = [super init];
     if (self) {
         _url = url;
+        
+        _handleDict = [NSMutableDictionary dictionary];
     }
     return self;
 }
@@ -54,7 +46,7 @@
     [self resetLeftBarButtonItems];
     [self setProgress:0.0];
     
-    NSURLRequest *req = [NSURLRequest requestWithURL:[NSURL URLWithString:_url]];
+    NSURLRequest *req = [NSURLRequest requestWithURL:_url];
     [self.webView loadRequest:req];
 }
 
@@ -70,12 +62,14 @@
 
 - (void)setBackBtnImage:(UIImage *)image
 {
-    self.backBarButtonItem.image = image;
+    UIButton *btn = (UIButton *)self.backBarButtonItem.customView;
+    [btn setImage:image forState:UIControlStateNormal];
 }
 
 - (void)setBackBtnTitle:(NSString *)title
 {
-    self.backBarButtonItem.title = title;
+    UIButton *btn = (UIButton *)self.backBarButtonItem.customView;
+    [btn setTitle:title forState:UIControlStateNormal];
 }
 
 - (void)setBackBtnTintColor:(UIColor *)color
@@ -91,6 +85,40 @@
 - (void)setTitleColor:(UIColor *)color
 {
     self.titleLabel.textColor = color;
+}
+
+- (void)setJavascriptObjectName:(NSString *)name
+{
+    
+}
+
+- (void)setJavascriptObjectProperty:(NSString *)property handle:(HandleBlock)block
+{
+    [_handleDict setObject:block forKey:property];
+    [self.userContentController addScriptMessageHandler:self name:property];
+}
+
+- (void)evaluateJavaScript:(NSString *)script completionHandler:(void (^ _Nullable)(_Nullable id, NSError * _Nullable error))block
+{
+    [self.webView evaluateJavaScript:script completionHandler:block];
+}
+
+- (void)callFunction:(NSString *)funcName withArgs:(NSArray<NSString *> *)args
+{
+    __block NSString *argsMergeRes = @""; //[args componentsJoinedByString:@","];
+    
+    //组合参数
+    [args enumerateObjectsUsingBlock:^(NSString * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        argsMergeRes = [argsMergeRes stringByAppendingString:[NSString stringWithFormat:@"'%@'", obj]];
+        if (obj != args.lastObject) {
+            argsMergeRes = [argsMergeRes stringByAppendingString:@","];
+        }
+    }];
+    NSString *call = [NSString stringWithFormat:@"%@(%@);", funcName, argsMergeRes];
+    
+    NSLog(@"call js func: %@", call);
+    
+    [self evaluateJavaScript:call completionHandler:nil];
 }
 
 #pragma mark - Private
@@ -120,7 +148,7 @@
 - (void)setProgress:(CGFloat)progress
 {
     self.progressView.alpha = 1.0;
-
+    
     [UIView animateWithDuration:0.2 animations:^{
         self.progressView.frame = CGRectMake(0, [self progressViewY], progress*SZ_SCREEN_WIDTH, 3);
     }];
@@ -144,9 +172,17 @@
     return 0;
 }
 
+- (CGFloat)webViewHeight
+{
+    if (self.navigationController.navigationBar.translucent) {
+        return SZ_SCREEN_HEIGHT;
+    }
+    return SZ_SCREEN_HEIGHT-SZ_NAV_HEIGHT;
+}
+
 - (void)setWebViewX:(CGFloat)x
 {
-    self.webView.frame = CGRectMake(x, 0, SZ_SCREEN_WIDTH, SZ_SCREEN_HEIGHT);
+    self.webView.frame = CGRectMake(x, 0, SZ_SCREEN_WIDTH, [self webViewHeight]);
 }
 
 #pragma mark - Event
@@ -210,6 +246,51 @@
     [self.navigationController popViewControllerAnimated:YES];
 }
 
+#pragma mark - WKUIDelegate
+
+- (void)webView:(WKWebView *)webView runJavaScriptAlertPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(void))completionHandler
+{
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"提示" message:message?:@"" preferredStyle:UIAlertControllerStyleAlert];
+    [alertController addAction:([UIAlertAction actionWithTitle:@"确认" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        completionHandler();
+    }])];
+    [self presentViewController:alertController animated:YES completion:nil];
+}
+
+- (void)webView:(WKWebView *)webView runJavaScriptConfirmPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(BOOL result))completionHandler
+{
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"提示" message:message?:@"" preferredStyle:UIAlertControllerStyleAlert];
+    [alertController addAction:([UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        completionHandler(NO);
+    }])];
+    [alertController addAction:([UIAlertAction actionWithTitle:@"确认" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        completionHandler(YES);
+    }])];
+    [self presentViewController:alertController animated:YES completion:nil];
+}
+
+- (void)webView:(WKWebView *)webView runJavaScriptTextInputPanelWithPrompt:(NSString *)prompt defaultText:(nullable NSString *)defaultText initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(NSString * _Nullable result))completionHandler
+{
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:prompt message:@"" preferredStyle:UIAlertControllerStyleAlert];
+    [alertController addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.text = defaultText;
+    }];
+    [alertController addAction:([UIAlertAction actionWithTitle:@"完成" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        completionHandler(alertController.textFields[0].text?:@"");
+    }])];
+    [self presentViewController:alertController animated:YES completion:nil];
+}
+
+#pragma mark - WKScriptMessageHandler
+
+- (void)userContentController:(WKUserContentController *)userContentController didReceiveScriptMessage:(WKScriptMessage *)message
+{
+    HandleBlock block = [_handleDict objectForKey:message.name];
+    if (block) {
+        block(message.body);
+    }
+}
+
 #pragma mark - WKNavigationDelegate
 
 - (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(null_unspecified WKNavigation *)navigation
@@ -226,6 +307,20 @@
 {
     self.title = webView.title;
     
+    //全局app对象初始化
+    [self evaluateJavaScript:@"app={};" completionHandler:nil];
+    for (NSString *key in _handleDict.allKeys) {
+        NSString *js = [NSString stringWithFormat:
+                        @"app.%@ = function(args) {                                 \
+                            window.webkit.messageHandlers.%@.postMessage(args)      \
+                        };"
+                        , key, key];
+        [self evaluateJavaScript:js completionHandler:nil];
+    }
+    
+    //网页载入完成回调
+    [self evaluateJavaScript:@"AppLoadFinished();" completionHandler:nil];
+    
     [self resetLeftBarButtonItems];
 }
 
@@ -234,14 +329,34 @@
 - (WKWebView *)webView
 {
     if (!_webView) {
-        _webView = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, SZ_SCREEN_WIDTH, SZ_SCREEN_HEIGHT)];
+        
+        _webView = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, SZ_SCREEN_WIDTH, [self webViewHeight]) configuration:self.webViewConfiguration];
         _webView.layer.shadowColor = [UIColor blackColor].CGColor;
         _webView.layer.shadowRadius = 3;
         _webView.layer.shadowOpacity = 0.8;
         _webView.navigationDelegate = self;
+        _webView.UIDelegate = self;
+        
         [_webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
     }
     return _webView;
+}
+
+- (WKWebViewConfiguration *)webViewConfiguration
+{
+    if (!_webViewConfiguration) {
+        _webViewConfiguration = [[WKWebViewConfiguration alloc]init];
+        _webViewConfiguration.userContentController = self.userContentController;
+    }
+    return _webViewConfiguration;
+}
+
+- (WKUserContentController *)userContentController
+{
+    if (!_userContentController) {
+        _userContentController = [[WKUserContentController alloc]init];
+    }
+    return _userContentController;
 }
 
 - (UIView *)progressView

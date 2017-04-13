@@ -21,7 +21,7 @@
                <BreakpointActionProxy
                   ActionExtensionID = "Xcode.BreakpointAction.DebuggerCommand">
                   <ActionContent
-                     consoleCommand = "reveal_load_sim">
+                     consoleCommand = "objc_reveal_load_sim">
                   </ActionContent>
                </BreakpointActionProxy>
             </Actions>

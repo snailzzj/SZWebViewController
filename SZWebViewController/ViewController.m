@@ -9,6 +9,7 @@
 #import "ViewController.h"
 
 #import "SZWebViewController.h"
+#import "TestViewController.h"
 
 @interface ViewController ()
 
@@ -31,7 +32,9 @@
 
 - (void)onClicked:(UIButton *)button
 {
-    SZWebViewController *web = [[SZWebViewController alloc]initWithURL:@"http://www.baidu.com"];
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"test" withExtension:@"html"];
+    
+    TestViewController *web = [[TestViewController alloc]initWithURL:url];
     [self.navigationController pushViewController:web animated:YES];
 }
 
