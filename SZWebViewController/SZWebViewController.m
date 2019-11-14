@@ -5,13 +5,21 @@
 #define SZ_SCREEN_WIDTH [UIScreen mainScreen].bounds.size.width
 #define SZ_SCREEN_HEIGHT [UIScreen mainScreen].bounds.size.height
 
-@interface SZWebViewController ()
+@interface SZWebViewController () <WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate>
+
+@property (strong, nonatomic) WKWebView *webView;
+@property (strong, nonatomic) WKUserContentController *userContentController;
+@property (strong, nonatomic) WKWebViewConfiguration *webViewConfiguration;
+
+@property (strong, nonatomic) UIView *progressView;
 
 @end
 
 @implementation SZWebViewController
 {
     NSURL *_url;
+    
+    NSMutableString *_injectionJavascript;
     
     NSMutableDictionary *_handleDict;
 }
@@ -21,6 +29,8 @@
     self = [super init];
     if (self) {
         _url = url;
+        
+        _injectionJavascript = [NSMutableString stringWithString:@"window.app = { _callbacks: {} };"];
         
         _handleDict = [NSMutableDictionary dictionary];
     }
@@ -37,112 +47,107 @@
 - (void)viewDidLoad
 {
     [super viewDidLoad];
-    
+
     self.view.backgroundColor = [UIColor whiteColor];
-    
     [self.view addSubview:self.webView];
-    [self.webView addGestureRecognizer:self.backPan];
+    
     [self.webView addSubview:self.progressView];
-    [self resetLeftBarButtonItems];
     [self setProgress:0.0];
     
     NSURLRequest *req = [NSURLRequest requestWithURL:_url];
     [self.webView loadRequest:req];
-}
-
-- (void)setTitle:(NSString *)title
-{
-    [super setTitle:title];
     
-    self.titleLabel.text = title;
-    [self.titleLabel sizeToFit];
+    [self.webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
 }
 
 #pragma mark - Public
 
-- (void)setBackBtnImage:(UIImage *)image
+- (void)registMethod:(NSString *)method useCallback:(BOOL)useCallback handle:(HandleBlock)handle
 {
-    UIButton *btn = (UIButton *)self.backBarButtonItem.customView;
-    [btn setImage:image forState:UIControlStateNormal];
-}
-
-- (void)setBackBtnTitle:(NSString *)title
-{
-    UIButton *btn = (UIButton *)self.backBarButtonItem.customView;
-    [btn setTitle:title forState:UIControlStateNormal];
-}
-
-- (void)setBackBtnTintColor:(UIColor *)color
-{
-    [self.backBarButtonItem.customView setTintColor:color];
-}
-
-- (void)setCloseBtnTintColor:(UIColor *)color
-{
-    [self.closeBarButtonItem setTintColor:color];
-}
-
-- (void)setTitleColor:(UIColor *)color
-{
-    self.titleLabel.textColor = color;
-}
-
-- (void)setJavascriptObjectName:(NSString *)name
-{
+    if (useCallback) {
+        [_injectionJavascript appendFormat:
+         @"\
+         window.app.%@ = function(params, callback) {\n\
+            if (typeof window.app._callbacks['%@'] === 'undefined') {\n\
+                window.app._callbacks['%@'] = [];\n\
+            }\
+            if (typeof callback === 'function') {\n\
+                window.app._callbacks['%@'].push(callback);\n\
+            }\n\
+            window.webkit.messageHandlers.%@.postMessage(params);\n\
+         };\
+         "
+         , method, method, method, method, method];
+    } else {
+        [_injectionJavascript appendFormat:
+         @"\
+         window.app.%@ = function(params) {\
+            window.webkit.messageHandlers.%@.postMessage(params);\
+         };\
+         "
+         , method, method];
+    }
     
+    [_handleDict setObject:handle forKey:method];
+    [self.userContentController addScriptMessageHandler:self name:method];
 }
 
-- (void)setJavascriptObjectProperty:(NSString *)property handle:(HandleBlock)block
+// 调用回调方法
+- (void)callJavascriptCallbacks:(NSString *)method withParams:(NSArray<NSString *> *)params
 {
-    [_handleDict setObject:block forKey:property];
-    [self.userContentController addScriptMessageHandler:self name:property];
-}
-
-- (void)evaluateJavaScript:(NSString *)script completionHandler:(void (^ _Nullable)(_Nullable id, NSError * _Nullable error))block
-{
-    [self.webView evaluateJavaScript:script completionHandler:block];
-}
-
-- (void)callFunction:(NSString *)funcName withArgs:(NSArray<NSString *> *)args
-{
-    __block NSString *argsMergeRes = @""; //[args componentsJoinedByString:@","];
+    // 遍历执行所有callback
+    NSString *js = [NSString stringWithFormat:@"\
+    var arrayEvent = window.app._callbacks['%@'];\
+    if (arrayEvent instanceof Array) {\
+        for (var i=0, length=arrayEvent.length; i<length; i+=1) {\
+            if (typeof arrayEvent[i] === 'function') {\
+                arrayEvent[i](%@);\
+            }\
+        }\
+    }\
+    ", method, [self paramsMerge:params]];
     
-    //组合参数
-    [args enumerateObjectsUsingBlock:^(NSString * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        argsMergeRes = [argsMergeRes stringByAppendingString:[NSString stringWithFormat:@"'%@'", obj]];
-        if (obj != args.lastObject) {
-            argsMergeRes = [argsMergeRes stringByAppendingString:@","];
-        }
+    // 执行并清除回调
+    __weak typeof(self) weakSelf = self;
+    [self.webView evaluateJavaScript:js completionHandler:^(id _Nullable wtf, NSError * _Nullable error) {
+        [weakSelf deleteJavascriptCallback:method];
     }];
-    NSString *call = [NSString stringWithFormat:@"%@(%@);", funcName, argsMergeRes];
+}
+
+// 删除某个方法的所有callback
+- (void)deleteJavascriptCallback:(NSString *)method
+{
+    NSString *js = [NSString stringWithFormat:@"\
+                    delete window.app._callbacks['%@']\
+                    "
+                    , method];
+    [self.webView evaluateJavaScript:js completionHandler:nil];
+}
+
+- (void)callJavascriptFunction:(NSString *)func withParams:(NSArray<NSString *> *)params
+{
+    NSString *call = [NSString stringWithFormat:@"%@(%@);", func, [self paramsMerge:params]];
     
     NSLog(@"call js func: %@", call);
     
-    [self evaluateJavaScript:call completionHandler:nil];
+    [self.webView evaluateJavaScript:call completionHandler:nil];
 }
 
 #pragma mark - Private
 
-- (void)resetLeftBarButtonItems
+// 组合参数，所有参数都是字符串
+- (NSString *)paramsMerge:(NSArray<NSString *> *)params
 {
-    UIBarButtonItem *leftSpaceFix = [[UIBarButtonItem alloc]initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace target:nil action:nil];
-    leftSpaceFix.width = -11;
+    __block NSString *paramsMergeRes = @"";
     
-    NSArray *backItems = @[leftSpaceFix, self.backBarButtonItem];
-    NSArray *closeItems = @[leftSpaceFix, self.closeBarButtonItem];
+    [params enumerateObjectsUsingBlock:^(NSString * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        paramsMergeRes = [paramsMergeRes stringByAppendingString:[NSString stringWithFormat:@"'%@'", obj]];
+        if (obj != params.lastObject) {
+            paramsMergeRes = [paramsMergeRes stringByAppendingString:@","];
+        }
+    }];
     
-    NSArray *resultItems = backItems;
-    if ([self.webView canGoBack]) {
-        resultItems = [resultItems arrayByAddingObjectsFromArray:closeItems];
-        self.navigationController.interactivePopGestureRecognizer.delegate = nil;
-        self.backPan.enabled = YES;
-    }
-    else {
-        self.navigationController.interactivePopGestureRecognizer.delegate = self;
-        self.backPan.enabled = NO;
-    }
-    
-    self.navigationItem.leftBarButtonItems = resultItems;
+    return paramsMergeRes;
 }
 
 - (void)setProgress:(CGFloat)progress
@@ -150,7 +155,7 @@
     self.progressView.alpha = 1.0;
     
     [UIView animateWithDuration:0.2 animations:^{
-        self.progressView.frame = CGRectMake(0, [self progressViewY], progress*SZ_SCREEN_WIDTH, 3);
+        self.progressView.frame = CGRectMake(0, 0, progress*SZ_SCREEN_WIDTH, 3);
     }];
     
     if (progress >= 1.0) {
@@ -158,31 +163,10 @@
             self.progressView.alpha = 0.0;
         } completion:^(BOOL finished) {
             if (finished) {
-                self.progressView.frame = CGRectMake(0, [self progressViewY], 0, 3);
+                self.progressView.frame = CGRectMake(0, 0, 0, 3);
             }
         }];
     }
-}
-
-- (CGFloat)progressViewY
-{
-    if (self.navigationController.navigationBar.translucent) {
-        return SZ_NAV_HEIGHT;
-    }
-    return 0;
-}
-
-- (CGFloat)webViewHeight
-{
-    if (self.navigationController.navigationBar.translucent) {
-        return SZ_SCREEN_HEIGHT;
-    }
-    return SZ_SCREEN_HEIGHT-SZ_NAV_HEIGHT;
-}
-
-- (void)setWebViewX:(CGFloat)x
-{
-    self.webView.frame = CGRectMake(x, 0, SZ_SCREEN_WIDTH, [self webViewHeight]);
 }
 
 #pragma mark - Event
@@ -191,43 +175,6 @@
 {
     if (object == self.webView && [keyPath isEqualToString:@"estimatedProgress"]) {
         [self setProgress:self.webView.estimatedProgress];
-    }
-}
-
-- (void)onBackPan:(UIPanGestureRecognizer *)pan
-{
-    static BOOL isDragging = NO;
-    
-    CGPoint pt = [pan locationInView:[UIApplication sharedApplication].keyWindow];
-    
-    if (pan.state == UIGestureRecognizerStateBegan) {
-        if (pt.x < 40) {
-            isDragging = YES;
-        }
-    }
-    else if (pan.state == UIGestureRecognizerStateChanged) {
-        if (isDragging) {
-            [self setWebViewX:pt.x];
-        }
-    }
-    else if (pan.state == UIGestureRecognizerStateEnded) {
-        isDragging = NO;
-        
-        if (pt.x > SZ_SCREEN_WIDTH/2) {
-            [UIView animateWithDuration:0.2 animations:^{
-                [self setWebViewX:SZ_SCREEN_WIDTH];
-            } completion:^(BOOL finished) {
-                if (finished) {
-                    [self setWebViewX:0];
-                    [self onBack];
-                }
-            }];
-        }
-        else {
-            [UIView animateWithDuration:0.2 animations:^{
-                [self setWebViewX:0];
-            }];
-        }
     }
 }
 
@@ -306,22 +253,6 @@
 - (void)webView:(WKWebView *)webView didFinishNavigation:(null_unspecified WKNavigation *)navigation
 {
     self.title = webView.title;
-    
-    //全局app对象初始化
-    [self evaluateJavaScript:@"app={};" completionHandler:nil];
-    for (NSString *key in _handleDict.allKeys) {
-        NSString *js = [NSString stringWithFormat:
-                        @"app.%@ = function(args) {                                 \
-                            window.webkit.messageHandlers.%@.postMessage(args)      \
-                        };"
-                        , key, key];
-        [self evaluateJavaScript:js completionHandler:nil];
-    }
-    
-    //网页载入完成回调
-    [self evaluateJavaScript:@"AppLoadFinished();" completionHandler:nil];
-    
-    [self resetLeftBarButtonItems];
 }
 
 #pragma mark - Setter, Getter
@@ -329,15 +260,12 @@
 - (WKWebView *)webView
 {
     if (!_webView) {
-        
-        _webView = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, SZ_SCREEN_WIDTH, [self webViewHeight]) configuration:self.webViewConfiguration];
+        _webView = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, SZ_SCREEN_WIDTH, SZ_SCREEN_HEIGHT) configuration:self.webViewConfiguration];
         _webView.layer.shadowColor = [UIColor blackColor].CGColor;
         _webView.layer.shadowRadius = 3;
         _webView.layer.shadowOpacity = 0.8;
         _webView.navigationDelegate = self;
         _webView.UIDelegate = self;
-        
-        [_webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
     }
     return _webView;
 }
@@ -345,7 +273,7 @@
 - (WKWebViewConfiguration *)webViewConfiguration
 {
     if (!_webViewConfiguration) {
-        _webViewConfiguration = [[WKWebViewConfiguration alloc]init];
+        _webViewConfiguration = [[WKWebViewConfiguration alloc] init];
         _webViewConfiguration.userContentController = self.userContentController;
     }
     return _webViewConfiguration;
@@ -354,7 +282,10 @@
 - (WKUserContentController *)userContentController
 {
     if (!_userContentController) {
+        WKUserScript *script = [[WKUserScript alloc] initWithSource:_injectionJavascript injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
+        
         _userContentController = [[WKUserContentController alloc]init];
+        [_userContentController addUserScript:script];
     }
     return _userContentController;
 }
@@ -362,54 +293,10 @@
 - (UIView *)progressView
 {
     if (!_progressView) {
-        _progressView = [[UIView alloc]init];
+        _progressView = [[UIView alloc] init];
         _progressView.backgroundColor = [UIColor redColor];
     }
     return _progressView;
-}
-
-- (UIBarButtonItem *)backBarButtonItem
-{
-    if (!_backBarButtonItem) {
-        UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-        [backBtn setFrame:CGRectMake(0, 0, 30, 40)];
-        [backBtn setImage:[UIImage imageNamed:@"icon_back"] forState:UIControlStateNormal];
-        [backBtn setTitle:@"" forState:UIControlStateNormal];
-        [backBtn setTintColor:[UIColor redColor]];
-        [backBtn setTitleColor:[UIColor blueColor] forState:UIControlStateNormal];
-        [backBtn addTarget:self action:@selector(onBack) forControlEvents:UIControlEventTouchUpInside];
-        _backBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:backBtn];
-        [_backBarButtonItem setTintColor:[UIColor redColor]];
-    }
-    return _backBarButtonItem;
-}
-
-- (UIBarButtonItem *)closeBarButtonItem
-{
-    if (!_closeBarButtonItem) {
-        _closeBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"关闭" style:UIBarButtonItemStylePlain target:self action:@selector(onClose)];
-        [_closeBarButtonItem setTintColor:[UIColor redColor]];
-    }
-    return _closeBarButtonItem;
-}
-
-- (UILabel *)titleLabel
-{
-    if (!_titleLabel) {
-        _titleLabel = [[UILabel alloc]init];
-        _titleLabel.textAlignment = NSTextAlignmentCenter;
-        _titleLabel.textColor = [UIColor redColor];
-        self.navigationItem.titleView = _titleLabel;
-    }
-    return _titleLabel;
-}
-
-- (UIPanGestureRecognizer *)backPan
-{
-    if (!_backPan) {
-        _backPan = [[UIPanGestureRecognizer alloc]initWithTarget:self action:@selector(onBackPan:)];
-    }
-    return _backPan;
 }
 
 @end
